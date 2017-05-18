@@ -18,8 +18,6 @@ import (
 	"github.com/docker/docker/dockerversion"
 	dopts "github.com/docker/docker/opts"
 	"github.com/docker/go-connections/sockets"
-	"github.com/docker/go-connections/tlsconfig"
-	"github.com/docker/notary/passphrase"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
@@ -161,25 +159,6 @@ func (cli *DockerCli) Initialize(opts *cliflags.ClientOptions) error {
 
 	var err error
 	cli.client, err = NewAPIClientFromFlags(opts.Common, cli.configFile)
-	if tlsconfig.IsErrEncryptedKey(err) {
-		var (
-			passwd string
-			giveup bool
-		)
-		passRetriever := passphrase.PromptRetrieverWithInOut(cli.In(), cli.Out(), nil)
-
-		for attempts := 0; tlsconfig.IsErrEncryptedKey(err); attempts++ {
-			// some code and comments borrowed from notary/trustmanager/keystore.go
-			passwd, giveup, err = passRetriever("private", "encrypted TLS private", false, attempts)
-			// Check if the passphrase retriever got an error or if it is telling us to give up
-			if giveup || err != nil {
-				return errors.Wrap(err, "private key is encrypted, but could not get passphrase")
-			}
-
-			opts.Common.TLSOptions.Passphrase = passwd
-			cli.client, err = NewAPIClientFromFlags(opts.Common, cli.configFile)
-		}
-	}
 
 	if err != nil {
 		return err
@@ -234,7 +213,7 @@ func LoadDefaultConfigFile(err io.Writer) *configfile.ConfigFile {
 
 // NewAPIClientFromFlags creates a new APIClient from command line flags
 func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.ConfigFile) (client.APIClient, error) {
-	host, err := getServerHost(opts.Hosts, opts.TLSOptions)
+	host, err := getServerHost(opts.Hosts)
 	if err != nil {
 		return &client.Client{}, err
 	}
@@ -244,13 +223,14 @@ func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.
 		customHeaders = map[string]string{}
 	}
 	customHeaders["User-Agent"] = UserAgent()
+    
 
 	verStr := api.DefaultVersion
 	if tmpStr := os.Getenv("DOCKER_API_VERSION"); tmpStr != "" {
 		verStr = tmpStr
 	}
 
-	httpClient, err := newHTTPClient(host, opts.TLSOptions)
+	httpClient, err := newHTTPClient(host)
 	if err != nil {
 		return &client.Client{}, err
 	}
@@ -258,7 +238,7 @@ func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.
 	return client.NewClient(host, verStr, httpClient, customHeaders)
 }
 
-func getServerHost(hosts []string, tlsOptions *tlsconfig.Options) (host string, err error) {
+func getServerHost(hosts []string) (host string, err error) {
 	switch len(hosts) {
 	case 0:
 		host = os.Getenv("DOCKER_HOST")
@@ -268,33 +248,23 @@ func getServerHost(hosts []string, tlsOptions *tlsconfig.Options) (host string, 
 		return "", errors.New("Please specify only one -H")
 	}
 
-	host, err = dopts.ParseHost(tlsOptions != nil, host)
+	host, err = dopts.ParseHost(false, host)
 	return
 }
 
-func newHTTPClient(host string, tlsOptions *tlsconfig.Options) (*http.Client, error) {
-	if tlsOptions == nil {
-		// let the api client configure the default transport.
-		return nil, nil
-	}
-	opts := *tlsOptions
-	opts.ExclusiveRootPools = true
-	config, err := tlsconfig.Client(opts)
-	if err != nil {
-		return nil, err
-	}
-	tr := &http.Transport{
-		TLSClientConfig: config,
-	}
-	proto, addr, _, err := client.ParseHost(host)
-	if err != nil {
-		return nil, err
-	}
+func newHTTPClient(host string) (*http.Client, error) {
 
-	sockets.ConfigureTransport(tr, proto, addr)
+    proto, addr, _, err := client.ParseHost(host)
+	if err != nil {
+		return nil, err
+	}
+    
+    tr := &http.Transport{}
+    
+    sockets.ConfigureTransport(tr, proto, addr)
 
 	return &http.Client{
-		Transport: tr,
+        Transport: tr,
 	}, nil
 }
 

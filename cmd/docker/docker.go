@@ -26,8 +26,8 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 	var flags *pflag.FlagSet
 
 	cmd := &cobra.Command{
-		Use:              "docker [OPTIONS] COMMAND [ARG...]",
-		Short:            "A self-sufficient runtime for containers",
+		Use:              "dupper [OPTIONS] COMMAND [ARG...]",
+		Short:            "Dup, Connect, and Scale Any App with Self-discoverable Microservies.",
 		SilenceUsage:     true,
 		SilenceErrors:    true,
 		TraverseChildren: true,
@@ -44,8 +44,6 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 			if cmd.Name() == "daemon" {
 				return nil
 			}
-			// flags must be the top-level command flags, not cmd.Flags()
-			opts.Common.SetDefaultOptions(flags)
 			dockerPreRun(opts)
 			if err := dockerCli.Initialize(opts); err != nil {
 				return err
@@ -134,7 +132,6 @@ func setValidateArgs(dockerCli *command.DockerCli, cmd *cobra.Command, flags *pf
 func initializeDockerCli(dockerCli *command.DockerCli, flags *pflag.FlagSet, opts *cliflags.ClientOptions) {
 	if dockerCli.Client() == nil { // when using --help, PersistentPreRun is not called, so initialization is needed.
 		// flags must be the top-level command flags, not cmd.Flags()
-		opts.Common.SetDefaultOptions(flags)
 		dockerPreRun(opts)
 		dockerCli.Initialize(opts)
 	}

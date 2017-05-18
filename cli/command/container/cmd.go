@@ -16,13 +16,8 @@ func NewContainerCommand(dockerCli *command.DockerCli) *cobra.Command {
 		RunE:  command.ShowHelp(dockerCli.Err()),
 	}
 	cmd.AddCommand(
-		NewAttachCommand(dockerCli),
-		NewCommitCommand(dockerCli),
 		NewCopyCommand(dockerCli),
-		NewCreateCommand(dockerCli),
-		NewDiffCommand(dockerCli),
 		NewExecCommand(dockerCli),
-		NewExportCommand(dockerCli),
 		NewKillCommand(dockerCli),
 		NewLogsCommand(dockerCli),
 		NewPauseCommand(dockerCli),
