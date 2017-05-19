@@ -2,12 +2,13 @@ package registry
 
 import (
 	"fmt"
-
-	"golang.org/x/net/context"
-
+    "net/http"
+    "bytes"
+    "encoding/json"
+    "io/ioutil"
+    
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
-	"github.com/docker/docker/registry"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +19,18 @@ type loginOptions struct {
 	password      string
 	email         string
 }
+
+type loginData struct{
+    AuthToken  string `json:"authToken"`
+    UserId     string `json:"userId"`
+}
+
+type loginResp struct {
+	Status string     `json:"status"`
+	Data   loginData  `json:"data"`
+    Message string    `json:"message"`
+}
+
 
 // NewLoginCommand creates a new `docker login` command
 func NewLoginCommand(dockerCli command.Cli) *cobra.Command {
@@ -38,50 +51,53 @@ func NewLoginCommand(dockerCli command.Cli) *cobra.Command {
 
 	flags := cmd.Flags()
 
-	flags.StringVarP(&opts.user, "username", "u", "", "Username")
+	flags.StringVarP(&opts.user, "email", "e", "", "Email")
 	flags.StringVarP(&opts.password, "password", "p", "", "Password")
-
-	// Deprecated in 1.11: Should be removed in docker 17.06
-	flags.StringVarP(&opts.email, "email", "e", "", "Email")
-	flags.MarkDeprecated("email", "will be removed in 17.06.")
-
+    
 	return cmd
 }
 
 func runLogin(dockerCli command.Cli, opts loginOptions) error {
-	ctx := context.Background()
-	clnt := dockerCli.Client()
+    var serverAddress string
 
-	var (
-		serverAddress string
-		authServer    = command.ElectAuthServer(ctx, dockerCli)
-	)
-	if opts.serverAddress != "" && opts.serverAddress != registry.DefaultNamespace {
+    if opts.serverAddress != "" {
 		serverAddress = opts.serverAddress
-	} else {
-		serverAddress = authServer
 	}
 
-	isDefaultRegistry := serverAddress == authServer
-
-	authConfig, err := command.ConfigureAuth(dockerCli, opts.user, opts.password, serverAddress, isDefaultRegistry)
+	authConfig, err := command.ConfigureAuth(dockerCli, opts.user, opts.password, serverAddress)
 	if err != nil {
 		return err
 	}
-	response, err := clnt.RegistryLogin(ctx, authConfig)
-	if err != nil {
-		return err
-	}
-	if response.IdentityToken != "" {
+    
+    var data = []byte("email=" + authConfig.Username + "&" + "password=" + authConfig.Password )
+    
+    authClient := &http.Client{}
+    resp, err := authClient.Post(serverAddress, "application/x-www-form-urlencoded", bytes.NewBuffer(data))
+    if err != nil {
+        return errors.Errorf("Error logging in: %v", err)
+    }
+    defer resp.Body.Close()
+
+    var jsonResp loginResp
+    body, _ := ioutil.ReadAll(resp.Body)
+    if err := json.Unmarshal(body, &jsonResp); err != nil {
+        fmt.Println(err)
+        return errors.Errorf("Error in parsinng response: %v", err)
+    }
+        
+    if jsonResp.Status == "success" {
 		authConfig.Password = ""
-		authConfig.IdentityToken = response.IdentityToken
-	}
-	if err := dockerCli.CredentialsStore(serverAddress).Store(authConfig); err != nil {
+		authConfig.IdentityToken = jsonResp.Data.AuthToken
+    }
+    
+    dockerCli.ConfigFile().AddAuthConfig(serverAddress, authConfig)
+    
+    if err := dockerCli.ConfigFile().Save(); err != nil {
 		return errors.Errorf("Error saving credentials: %v", err)
 	}
 
-	if response.Status != "" {
-		fmt.Fprintln(dockerCli.Out(), response.Status)
+	if jsonResp.Status != "" {
+        fmt.Fprintln(dockerCli.Out(), string(body))
 	}
 	return nil
 }

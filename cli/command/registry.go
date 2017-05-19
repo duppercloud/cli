@@ -50,8 +50,7 @@ func RegistryAuthenticationPrivilegedFunc(cli Cli, index *registrytypes.IndexInf
 	return func() (string, error) {
 		fmt.Fprintf(cli.Out(), "\nPlease login prior to %s:\n", cmdName)
 		indexServer := registry.GetAuthConfigKey(index)
-		isDefaultRegistry := indexServer == ElectAuthServer(context.Background(), cli)
-		authConfig, err := ConfigureAuth(cli, "", "", indexServer, isDefaultRegistry)
+		authConfig, err := ConfigureAuth(cli, "", "", indexServer)
 		if err != nil {
 			return "", err
 		}
@@ -68,25 +67,18 @@ func ResolveAuthConfig(ctx context.Context, cli Cli, index *registrytypes.IndexI
 		configKey = ElectAuthServer(ctx, cli)
 	}
 
-	a, _ := cli.CredentialsStore(configKey).Get(configKey)
+    a := cli.ConfigFile().GetAuthConfig(configKey)
 	return a
 }
 
 // ConfigureAuth returns an AuthConfig from the specified user, password and server.
-func ConfigureAuth(cli Cli, flUser, flPassword, serverAddress string, isDefaultRegistry bool) (types.AuthConfig, error) {
+func ConfigureAuth(cli Cli, flUser, flPassword, serverAddress string) (types.AuthConfig, error) {
 	// On Windows, force the use of the regular OS stdin stream. Fixes #14336/#14210
 	if runtime.GOOS == "windows" {
 		cli.SetIn(NewInStream(os.Stdin))
 	}
 
-	if !isDefaultRegistry {
-		serverAddress = registry.ConvertToHostname(serverAddress)
-	}
-
-	authconfig, err := cli.CredentialsStore(serverAddress).Get(serverAddress)
-	if err != nil {
-		return authconfig, err
-	}
+    authconfig := cli.ConfigFile().GetAuthConfig(serverAddress)
 
 	// Some links documenting this:
 	// - https://code.google.com/archive/p/mintty/issues/56
@@ -102,10 +94,6 @@ func ConfigureAuth(cli Cli, flUser, flPassword, serverAddress string, isDefaultR
 	authconfig.Username = strings.TrimSpace(authconfig.Username)
 
 	if flUser = strings.TrimSpace(flUser); flUser == "" {
-		if isDefaultRegistry {
-			// if this is a default registry (docker hub), then display the following message.
-			fmt.Fprintln(cli.Out(), "Login with your Docker ID to push and pull images from Docker Hub. If you don't have a Docker ID, head over to https://hub.docker.com to create one.")
-		}
 		promptWithDefault(cli.Out(), "Username", authconfig.Username)
 		flUser = readInput(cli.In(), cli.Out())
 		flUser = strings.TrimSpace(flUser)

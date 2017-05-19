@@ -40,10 +40,6 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 			return command.ShowHelp(dockerCli.Err())(cmd, args)
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// daemon command is special, we redirect directly to another binary
-			if cmd.Name() == "daemon" {
-				return nil
-			}
 			dockerPreRun(opts)
 			if err := dockerCli.Initialize(opts); err != nil {
 				return err
@@ -63,7 +59,6 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 	setHelpFunc(dockerCli, cmd, flags, opts)
 
 	cmd.SetOutput(dockerCli.Out())
-	cmd.AddCommand(newDaemonCommand())
 	commands.AddCommands(cmd, dockerCli)
 
 	setValidateArgs(dockerCli, cmd, flags, opts)

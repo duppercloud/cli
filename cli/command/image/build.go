@@ -271,7 +271,7 @@ func runBuild(dockerCli *command.DockerCli, options buildOptions) error {
 
 	var body io.Reader = progress.NewProgressReader(buildCtx, progressOutput, 0, "", "Sending build context to Docker daemon")
 
-	authConfigs, _ := dockerCli.GetAllCredentials()
+    authConfigs := dockerCli.ConfigFile().GetAllAuthConfigs()
 	buildOptions := types.ImageBuildOptions{
 		Memory:         options.memory.Value(),
 		MemorySwap:     options.memorySwap.Value(),

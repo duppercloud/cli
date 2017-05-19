@@ -14,12 +14,11 @@ import (
 const (
 	// ConfigFileName is the name of config file
 	ConfigFileName = "config.json"
-	configFileDir  = ".docker"
-	oldConfigfile  = ".dockercfg"
+	configFileDir  = ".dupper"
 )
 
 var (
-	configDir = os.Getenv("DOCKER_CONFIG")
+	configDir = os.Getenv("DUPPER_CONFIG")
 )
 
 func init() {
@@ -45,16 +44,6 @@ func NewConfigFile(fn string) *configfile.ConfigFile {
 		HTTPHeaders: make(map[string]string),
 		Filename:    fn,
 	}
-}
-
-// LegacyLoadFromReader is a convenience function that creates a ConfigFile object from
-// a non-nested reader
-func LegacyLoadFromReader(configData io.Reader) (*configfile.ConfigFile, error) {
-	configFile := configfile.ConfigFile{
-		AuthConfigs: make(map[string]types.AuthConfig),
-	}
-	err := configFile.LegacyLoadFromReader(configData)
-	return &configFile, err
 }
 
 // LoadFromReader is a convenience function that creates a ConfigFile object from
@@ -96,21 +85,6 @@ func Load(configDir string) (*configfile.ConfigFile, error) {
 		// if file is there but we can't stat it for any reason other
 		// than it doesn't exist then stop
 		return &configFile, errors.Errorf("%s - %v", configFile.Filename, err)
-	}
-
-	// Can't find latest config file so check for the old one
-	confFile := filepath.Join(homedir.Get(), oldConfigfile)
-	if _, err := os.Stat(confFile); err != nil {
-		return &configFile, nil //missing file is not an error
-	}
-	file, err := os.Open(confFile)
-	if err != nil {
-		return &configFile, errors.Errorf("%s - %v", confFile, err)
-	}
-	defer file.Close()
-	err = configFile.LegacyLoadFromReader(file)
-	if err != nil {
-		return &configFile, errors.Errorf("%s - %v", confFile, err)
 	}
 
 	if configFile.HTTPHeaders == nil {
