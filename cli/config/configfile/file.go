@@ -13,10 +13,8 @@ import (
 )
 
 const (
-	// This constant is only used for really old config files when the
-	// URL wasn't saved as part of the config file and it was just
-	// assumed to be this value.
-	defaultIndexserver = "http://test.dupper.co/api/v1/login"
+    DefaultHost = "http://test.dupper.co"
+	DefaultAuthServer = DefaultHost + "/api/v1/login"
 )
 
 // ConfigFile ~/.docker/config.json file info
@@ -78,7 +76,12 @@ func (configFile *ConfigFile) GetAuthConfig(serverAddr string) types.AuthConfig 
 	return configFile.AuthConfigs[serverAddr]
 }
 
-// GetAuthConfig returns authentication configured in config file.
+// DelAuthConfig deletes authentication configured from config file.
+func (configFile *ConfigFile) DelAuthConfig(serverAddr string) {
+    delete(configFile.AuthConfigs, serverAddr)
+}
+
+// GetAllAuthConfigs returns authentications configured in config file.
 func (configFile *ConfigFile) GetAllAuthConfigs() map[string]types.AuthConfig {
 	return configFile.AuthConfigs
 }

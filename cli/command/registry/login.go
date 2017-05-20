@@ -6,12 +6,15 @@ import (
     "bytes"
     "encoding/json"
     "io/ioutil"
+    "golang.org/x/net/context"
     
+	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
+
 
 type loginOptions struct {
 	serverAddress string
@@ -43,8 +46,8 @@ func NewLoginCommand(dockerCli command.Cli) *cobra.Command {
 		Args:  cli.RequiresMaxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				opts.serverAddress = args[0]
-			}
+				opts.serverAddress = args[0]                
+            }
 			return runLogin(dockerCli, opts)
 		},
 	}
@@ -58,12 +61,20 @@ func NewLoginCommand(dockerCli command.Cli) *cobra.Command {
 }
 
 func runLogin(dockerCli command.Cli, opts loginOptions) error {
-    var serverAddress string
+    ctx := context.Background()
 
+    var (
+		serverAddress = configfile.DefaultAuthServer
+		authServer    = command.ElectAuthServer(ctx, dockerCli)
+	)    
+    
     if opts.serverAddress != "" {
 		serverAddress = opts.serverAddress
-	}
-
+	} else
+    {
+        serverAddress = authServer
+    }
+    
 	authConfig, err := command.ConfigureAuth(dockerCli, opts.user, opts.password, serverAddress)
 	if err != nil {
 		return err

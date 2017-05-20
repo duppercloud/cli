@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-
+    
 	cliconfig "github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
 	cliflags "github.com/docker/cli/cli/flags"
+    dopts "github.com/docker/docker/opts"
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/types/versions"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/dockerversion"
-	dopts "github.com/docker/docker/opts"
 	"github.com/docker/go-connections/sockets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -80,6 +80,19 @@ func (cli *DockerCli) In() *InStream {
 	return cli.in
 }
 
+// Is login information present
+func (cli *DockerCli) IsLoggedin() bool {
+    ctx := context.Background()
+    authServerAddress := ElectAuthServer(ctx, cli) 
+    ac := cli.configFile.AuthConfigs[authServerAddress]; 
+
+    if ac.IdentityToken != "" {
+        return true
+	}    
+    
+    return false
+}
+
 // ShowHelp shows the command help.
 func ShowHelp(err io.Writer) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
@@ -107,6 +120,16 @@ func (cli *DockerCli) Initialize(opts *cliflags.ClientOptions) error {
 
 	var err error
 	cli.client, err = NewAPIClientFromFlags(opts.Common, cli.configFile)
+    
+    ctx := context.Background()
+    authServerAddress := ElectAuthServer(ctx, cli) 
+    
+    ac := cli.configFile.GetAuthConfig(authServerAddress); 
+    customHeaders := cli.client.(*client.Client).CustomHTTPHeaders()
+    
+    customHeaders["X-User-Id"] = ac.Username
+    customHeaders["X-Auth-Token"] = ac.IdentityToken
+    cli.client.(*client.Client).SetCustomHTTPHeaders(customHeaders)
 
 	if err != nil {
 		return err
@@ -153,26 +176,22 @@ func LoadDefaultConfigFile(err io.Writer) *configfile.ConfigFile {
 	if e != nil {
 		fmt.Fprintf(err, "WARNING: Error loading config file:%v\n", e)
 	}
-	if !configFile.ContainsAuth() {
-        fmt.Fprintf(err, "Please login first using dupper login.")
-	}
 	return configFile
 }
 
 // NewAPIClientFromFlags creates a new APIClient from command line flags
-func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.ConfigFile) (client.APIClient, error) {
+func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.ConfigFile) (client.APIClient, error) {    
 	host, err := getServerHost(opts.Hosts)
 	if err != nil {
 		return &client.Client{}, err
 	}
-
+    
 	customHeaders := configFile.HTTPHeaders
 	if customHeaders == nil {
 		customHeaders = map[string]string{}
 	}
 	customHeaders["User-Agent"] = UserAgent()
     
-
 	verStr := api.DefaultVersion
 	if tmpStr := os.Getenv("DOCKER_API_VERSION"); tmpStr != "" {
 		verStr = tmpStr
@@ -183,8 +202,9 @@ func NewAPIClientFromFlags(opts *cliflags.CommonOptions, configFile *configfile.
 		return &client.Client{}, err
 	}
 
-	return client.NewClient(host, verStr, httpClient, customHeaders)
+    return client.NewClient(host, verStr, httpClient, customHeaders)
 }
+
 
 func getServerHost(hosts []string) (host string, err error) {
 	switch len(hosts) {
@@ -196,8 +216,9 @@ func getServerHost(hosts []string) (host string, err error) {
 		return "", errors.New("Please specify only one -H")
 	}
 
-	host, err = dopts.ParseHost(false, host)
-	return
+    host, err = dopts.ParseHost(false, host)
+    
+    return
 }
 
 func newHTTPClient(host string) (*http.Client, error) {

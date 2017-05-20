@@ -44,6 +44,13 @@ func newDockerCommand(dockerCli *command.DockerCli) *cobra.Command {
 			if err := dockerCli.Initialize(opts); err != nil {
 				return err
 			}
+            
+            if cmd.Name() != "dupper" && 
+               cmd.Name() != "login" && 
+               !dockerCli.IsLoggedin() {
+                return errors.New("Not logged-in. Please run dupper login")
+            }
+            
 			return isSupported(cmd, dockerCli)
 		},
 	}
